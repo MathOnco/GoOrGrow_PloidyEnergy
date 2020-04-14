@@ -1,7 +1,7 @@
 /*
     go_or_grow.cpp
     Author: Gregory J. Kimmel
-    Date: 12/09/2019
+    Date: 04/12/2020
 
     This file solves the coupled advection-diffusion equation that governs cell
     movement with ploidy:
@@ -73,7 +73,7 @@ mat make_laplacian(int N, double dx);       // Make laplacian matrix
 mat make_gradient(int N, double dx, vec r); // Make gradient matrix
 mat make_gradient(int N, double dx);
 vec f(vec E, double xi);                    //Chemotactic term
-vec g(vec E, vec u, vec v, double k);       // Growth term
+vec g(vec E, vec u, vec v, double k, vec c);       // Growth term
 vec h(vec u, vec v, double a);              // Consumption term
 void writeToFile(string filename, vec v);   // Write vector to file
 void writeToFile(string filename, mat m);   // Write matrix to file
@@ -110,12 +110,12 @@ int main(int argc, char* argv[])
 
     // The user provides the final time and step size
     // Check if correct usage is given
-    if(argc < 22 || argc > 24)
+    if(argc < 22 || argc > 25)
     {
         printf("Usage: ./go_or_grow <tFinal> <R> <R0> <dt> <dr> <u0> <v0>"
         " <d(eta)> <a> <xi_u> <ku> <xi_v> <kv> <tfile> <rfile> <Efile> "
-        "<ufile> <vfile> <outputfile> <saveFiles> <verbosity> <opt. smallEps>" 
-        " <opt. alpha>\n");
+        "<ufile> <vfile> <outputfile> <saveFiles> <verbosity> "
+        "<opt. growoutside> <opt. smallEps> <opt. alpha>\n");
         return -1;
     }
 
@@ -140,16 +140,25 @@ int main(int argc, char* argv[])
     string outputfile = argv[19];
     int saveFiles = atoi(argv[20]); // Save files
     int verbosity = atoi(argv[21]); // Output to terminal control
+    bool growOutsideR0 = true;      // If can cells grow outside initial radius?
     double alpha = 0.5; // Crank Nicolson (alpha = 1 for Backward Euler)
 
     // Small amount of diffusion for cells for numerical stability
     double smallEps = 1e-2;
 
     if(argc == 23)
-        smallEps = atof(argv[22]);
+    {
+        if(atoi(argv[22])==1)
+            growOutsideR0 = true;
+        else if (atoi(argv[22]) == 0)
+            growOutsideR0 = false;
+    }
 
     if(argc == 24)
-        alpha = atof(argv[23]);
+        smallEps = atof(argv[23]);
+
+    if(argc == 25)
+        alpha = atof(argv[24]);
 
     // // ADD WARNING IF dt/dx^2 is too big??
     // if(dt/(dr*dr)>0.5)
@@ -204,8 +213,20 @@ int main(int argc, char* argv[])
     radL = laplacian + gradLaplace;
 
     // Used to generate time-dependent part of matrices
-    vec f0,g0,h0, soln;
+    vec f0,g0,h0, soln, growthAllowed(Nr,fill::ones);
 
+    if (!growOutsideR0)
+    {
+        for(int i=Nr-1;i>=0;i--)
+        {
+            if (r(i) > R0)
+                growthAllowed(i) = 0.0;
+            else
+                break;
+        }
+    }
+
+    // We generate
 
     // Exit if the sum(E) < tol (no energy left)
     double tol = 1e-3;
@@ -239,7 +260,7 @@ int main(int argc, char* argv[])
 
         // Build matrix solve for u
         f0 = f(E.col(n),xi_u);
-        g0 = g(E.col(n),u.col(n),v.col(n),ku);
+        g0 = g(E.col(n),u.col(n),v.col(n),ku,growthAllowed);
 
         // z = eps*nabla^2 - nabla^2(f(E)) - nabla(f(E))*nabla + g0
         z = smallEps*radL + diagmat(g0 - radL*f0) -
@@ -263,7 +284,7 @@ int main(int argc, char* argv[])
 
         // Build matrix solve for v
         f0 = f(E.col(n),xi_v);
-        g0 = g(E.col(n),u.col(n),v.col(n),kv);
+        g0 = g(E.col(n),u.col(n),v.col(n),kv, growthAllowed);
 
         // z = eps*nabla^2 - nabla^2(f(E)) - nabla(f(E))*nabla + g0
         z = smallEps*radL + diagmat(g0 - radL*f0) -
@@ -530,7 +551,7 @@ vec f(vec E, double xi)
 
 /*
 
-    g(E, u, v,k)
+    g(E, u, v,k, c)
 
     This function outputs the vector g(E, u, v,k) - the growth term
     Currently we use E/(k + E), but other functional forms can be given
@@ -540,20 +561,21 @@ vec f(vec E, double xi)
             u:  The amount of goers
             v:  The amount of growers
             k: The sensitivity to less energy (high k = high sensitivity)
+            c: Vector of ones and 0 that restricts growth if ECM prohibits it
 
         OUTPUTS
             g:  A vector outputting the values for a given energy.
 
 */
-vec g(vec E, vec u, vec v, double k)
+vec g(vec E, vec u, vec v, double k, vec c)
 {
 
     // vec  vecOnes = ones<vec>(u.n_elem);
 
     if(k==0.0)
-        return (1.0 - u - v);
+        return (c - u - v);
     else
-        return (E/(k+E)) % (1.0 - u - v);
+        return (E/(k+E)) % (c - u - v);
 
 }
 
