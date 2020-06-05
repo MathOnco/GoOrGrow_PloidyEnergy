@@ -9,7 +9,7 @@ CXXFLAGS =	-O2
 CXX	=	g++
 
 TARGETS =	go_or_grow
-OBJECTS =	go_or_grow.cpp
+OBJECTS =	go_or_grow_V2.cpp
 REMOVE =	go_or_grow.o
 LINKS =	-std=c++11 -larmadillo
 
