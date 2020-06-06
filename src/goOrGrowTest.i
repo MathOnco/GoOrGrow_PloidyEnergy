@@ -14,6 +14,6 @@ phi_u	0.3
 xi_v	0.5
 phi_v	0.75
 dim	2
-growOutsideR0	true
+growOutsideR0	false
 saveFiles	false
 randomCellMotion	1e-2

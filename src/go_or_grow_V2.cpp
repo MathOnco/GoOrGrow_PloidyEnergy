@@ -392,14 +392,14 @@ int main(int argc, char* argv[])
 
     if (!growOutsideR0)
     {
-        for(int i=Nr-1;i>=0;i--)
+        for(int i=0;i<Nr;i++)
         {
             if (r(i) > R0)
                 growthAllowed(i) = 0.0;
-            else
-                break;
         }
     }
+
+    cout << growthAllowed << endl;
 
     // We generate
 
