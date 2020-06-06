@@ -22,10 +22,40 @@ On Mac using homebrew:
 ```
 
 ## Running tests
-To make sure everything is running properly, go to src directory and type ```make```. If everything compiles, here is a working example
+To make sure everything is running properly, go to src directory and type ```make```. If everything compiles, here is a working example that uses default parameters:
 
 ```
-./go_or_grow 100.0 10.0 1.0 0.005 0.1 0.2 0.4 10.0 2.3 0.5 0.3 0.1 0.8 t.txt r.txt E.txt u.txt v.txt statistics.txt 1 1
+./go_or_grow -v 1
+```
+
+To give user defined values:
+
+```
+./go_or_grow -v 1 -i <inputfile>
+```
+
+where ```<inputfile>``` is a tab separated file that contains the parameter names and values:
+```
+# example input.in contents:
+outFile	out_06-05-20
+statisticsFile	stats_06-05-20
+tFinal	100.0
+R	10.0
+R0	5.0
+dt	0.01
+dr	0.1
+u0	0.1
+v0	0.1
+eta	100.0
+a	3.4
+xi_u	0.7
+phi_u	0.3
+xi_v	0.5
+phi_v	0.75
+dim	2
+growOutsideR0	true
+saveFiles	false
+randomCellMotion	1e-2
 ```
 
 ## Authors
