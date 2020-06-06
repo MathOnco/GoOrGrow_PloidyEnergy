@@ -11,8 +11,8 @@
     v_t = -nabla * (u nabla f(E)) + g(E,k) v
 
     USAGE
-        ./go_or_grow -i input.in -o output -v
-        ./go_or_grow -v
+        ./go_or_grow -i input.in -o output -v <num>
+        ./go_or_grow -v <num>
         ./go_or_grow
 
     INPUTS
@@ -398,10 +398,6 @@ int main(int argc, char* argv[])
                 growthAllowed(i) = 0.0;
         }
     }
-
-    cout << growthAllowed << endl;
-
-    // We generate
 
     // Exit if the sum(E) < tol (no energy left)
     double tol = 1e-3;

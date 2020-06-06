@@ -2,7 +2,7 @@ outFile	out_06-05-20
 statisticsFile	stats_06-05-20
 tFinal	100.0
 R	10.0
-R0	2.0
+R0	5.0
 dt	0.01
 dr	0.1
 u0	0.1
@@ -14,6 +14,6 @@ phi_u	0.3
 xi_v	0.5
 phi_v	0.75
 dim	2
-growOutsideR0	false
+growOutsideR0	true
 saveFiles	false
 randomCellMotion	1e-2
