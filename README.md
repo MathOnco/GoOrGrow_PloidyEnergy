@@ -1,6 +1,6 @@
 # Go or grow: Analysis of interaction of ploidy in nutrient-limiting environment
 
-We investigate the impact of a nutrient-limiting environment on the co-evoling polyploidy cells in a petri dish using coupled partial differential equations (PDEs) that govern the spatio-temporal dynamics of the nutrient (energy), low ploidy (energy efficient and high ploidy (energy inefficient).
+We investigate the impact of a nutrient-limiting environment on the co-evoling polyploidy cells in a petri dish using coupled partial differential equations (PDEs) that govern the spatio-temporal dynamics of the nutrient (energy), low ploidy (energy efficient) and high ploidy (energy inefficient).
 
 ## Getting Started
 
@@ -37,8 +37,8 @@ To give user defined values:
 where ```<inputfile>``` is a tab separated file that contains the parameter names and values:
 ```
 # example input.in contents:
-outFile	out_06-05-20
-statisticsFile	stats_06-05-20
+outFile	out
+statisticsFile	statsfile
 tFinal	100.0
 R	10.0
 R0	5.0
