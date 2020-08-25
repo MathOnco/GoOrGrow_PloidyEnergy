@@ -223,6 +223,3 @@ We conclude that there is little redundancy in the contributions of model paramt
 ```{r sessionInfo}
 sessionInfo()
 ```
-
-# References
-
