@@ -1,0 +1,228 @@
+---
+title: "PDE Model Calibration using MEP-LINCS data" 
+date: "Last update: `r format(Sys.time(), '%d %B, %Y')`" 
+output:
+  html_document:
+    toc: true
+    toc_float:
+        collapsed: true
+        smooth_scroll: true
+    toc_depth: 2
+    fig_caption: yes
+    code_folding: show
+    number_sections: true
+
+fontsize: 14pt
+---
+
+# Pre-requisites
+
+Load all required libraries and define static variables:
+
+```{r knitr options, include=F}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup}
+library(moments)
+library(plotly)
+library(transport)
+library(aqfig)
+library(sensitivity)
+library(ggplot2)
+library(scatterplot3d)
+library(data.table)
+library(matlab)
+library(factoextra) 
+library(RColorBrewer) 
+library(FactoMineR) 
+library(umap) 
+library(dbscan) 
+library(plyr) 
+library(ggpubr)
+source("Utils.R")
+UM_SPOT_DIAM = 350
+hcc1954_DT = 43.81; ##hrs
+##Summary stats of interest
+soi =  as.character(unique(round((1:175)/17)*17));
+poi_nondim = c("phi_u","xi_u","eta", "a", "R", "L", "tau", "u0")
+poi_dim = c("Chi", "gamma", "delta", "xi_u", "phi_u")
+##ECMs of interest
+eoi = c("GAP43", "CDH1"); 
+PARAM_ANNO = PARAM_ANNOTATION(numberOfSubpopulations=1)
+print(head(PARAM_ANNO), quote = F)
+```
+
+# Ranking simulations
+
+For model calibration we use data from the microenvironment microarray (MEMA) platform (Watson et al., 2018; Kenan et al., 2018). It consists of extra-cellular matrix (ECM) spots, 350 um in diameter, that are printed onto a rectangular array. Advantage of using this data for model calibration is for one the amount of data available: 48 environments – defined by 48 distinct ECM coats  -- and we have multiple replicates of each adding up to a total of close to 700 spots on this array. Another advantage is that it is a very controlled expderiment: cells are grown for exactly 3 days. And we’re looking at a ductal breast carcinoma cell line called HCC1954, which has a doubling time of 44 hours, translating to maximal growth rate of 0.56 per day. We know the seeding radius is simply the radius of a single MEMA spot. So we have 5 parameters left that we need to fit to the data. And to do so we ran more than 150,000 simulations throughout the parameter search space. Here we read both sets of summary statistics, obtained from simulated and experimental data: 
+
+
+```{r Read simulated and observed (MEP-LINCS) summary statistics and model parameters}
+## Read simulated summary statistics
+allStats = read.table("SupplementaryData1.txt", sep="\t", check.names = F, stringsAsFactors = F, row.names = NULL);
+param = read.table("SupplementaryData2.txt", sep="\t", check.names = F, stringsAsFactors = F, header=T, row.names = 1);
+param$percentV0 = 100*param$v0/param$uv0
+sumstats = allStats[grep("u+v",allStats$row.names, fixed = T), ]
+sumstats = sumstats[!param$FAIL,]
+param    =    param[!param$FAIL,]
+rownames(sumstats) <- sumstats$simulation
+sumstats = sumstats[,colnames(sumstats) %in% soi, drop=F]
+
+## Read observed summary statistics
+mepStats = read.table("SupplementaryData3.txt", sep="\t", check.names = F, stringsAsFactors = F)
+mepStats = mepStats[,colnames(mepStats) %in% colnames(sumstats), drop=F]
+
+## Infer dimensional from non-dimensional parameters:
+param_dim = t(apply(param[,c("eta","a","R", "tau")], 1, function(x) nondimensional2dimensional(eta=x["eta"], a = x["a"], R = x["R"], tau = x["tau"])))
+param = cbind(param,param_dim)
+print(head(param),quote = F)
+```
+
+Next we calculate spatial summary statistics that are independent of the calibration data (i.e. the growth patterns on the ECMs). We include four additional spatial statistics: skewness, kurtosis, confluence and gradient near the edge of the ECM.
+ 
+```{r Calculate additional summary statistics}
+
+## Kurtosis, skewness & confluence:
+sumstats2 = cbind(apply(sumstats, 1, moments::kurtosis), apply(sumstats, 1, moments::skewness))
+sumstats2 = as.data.frame(sumstats2)
+rownames(sumstats2) = rownames(sumstats)
+colnames(sumstats2) = c("kurtosis","skewness")
+sumstats2$confluence = apply(sumstats,1,mean)
+
+## Distance to center of circular domain:
+d2c = as.numeric(colnames(mepStats))
+## Sharpness near boundary of circular domain:
+ii = (length(d2c)-4):length(d2c)
+sumstats2$coef = apply(sumstats, 1, function(x) summary(lm(x[ii] ~ d2c[ii]))$coefficients[2,"Estimate"] )
+```
+
+We compare 1D spatial distributions obtained from each simulation with each observation from the 48 ECM environments using the Wasserstein metric. 
+
+```{r Wasserstein distance between simulations and observations}
+d = apply(mepStats[,colnames(sumstats)], 1, function(x) apply(sumstats, 1, function(y) wasserstein1d(x, y))); 
+ii_sim = apply(d, 2, function(x) which(x<=quantile(d, 0.0005, na.rm = T))); 
+col = fliplr(brewer.pal(12, "Paired"))
+names(col) = names(ii_sim)[sort(sapply(ii_sim, length), index.return=T, decreasing = T)$ix[1:length(col)]]
+col["prior"] = "gray"
+print(paste(ncol(d)-length(col),"ECMs account for",1-length(unlist(ii_sim[names(col)]))/length(unlist(ii_sim))," of top simulations. Excluded from further analsysis"), quote=F)
+ii_sim = ii_sim[names(ii_sim) %in% names(col)]
+print(paste("Focusing on the remaining",length(ii_sim),"ECMs, represented by",length(unlist(ii_sim)),"simulations."), quote=F)
+```
+
+## Visualization
+
+Posterior distributions of dimensional parameters from the top 2% simulations differ from the prior uniform distribution (in gray). This was the case for 12 out of 48 ECMs, suggesting the model could explain one quarter of growth conditions on the MEMA platform. Not only do they differ from the prior, but they are also distinct for different ECMs:
+
+```{r Visualize posterior and prior parameter distributions}
+param$group <-  as.character(paste0("top ",round(100*length(unique(unlist(ii_sim)))/nrow(param)),"%"))
+param$ECM <- "prior"
+param_2 = rbind(param, param[unlist(ii_sim),] )
+param_2$group[1:nrow(param)] = "prior"
+idx = (nrow(param)+1):nrow(param_2)
+param_2$ECM[idx] <- unlist(sapply(names(ii_sim), function(x) rep(x,length(ii_sim[[x]]))))
+param_2$group[idx] = paste(param_2$group[idx], param_2$ECM[idx])
+
+lapply(c("phi_u","Chi","delta"), function(x) ggplotHist(x, param_2[param_2$ECM %in% c(eoi, "prior"), ], logx=F, col = col[unique(param_2$ECM)]))
+```
+
+# Sensitivity analysis
+ 
+The Sobol Index quantifies how much of the variability in spatial cell concentration is explained by each parameter:
+
+```{r sensitivity analysis}
+sensi = list()
+sub_breaks = seq(1,nrow(param),by=10000)
+for (i in 2:length(sub_breaks)){
+  print(paste("Calculating Sobol index for simulation set", (i-1),"of",(length(sub_breaks)-1) ), quote=F)
+  for(ecm in colnames(sumstats2)){
+    goorgrow <- function( param){
+      return(sumstats2[rownames(param),ecm])
+    }
+    x <- sobolshap_knn(model = goorgrow, X = param[sub_breaks[(i-1)]:sub_breaks[i],poi_dim], U = NULL, method = "knn", n.knn = 5, return.shap = TRUE, rescale = TRUE, n.limit = 2000)
+    sensi[[ecm]][[i-1]] = x
+  }
+}
+sobol = lapply(names(sensi), function(ecm) lapply(sensi[[ecm]], function(x) extract(x)$T ))
+sobol = lapply(sobol, function(x) do.call(rbind, x))
+names(sobol) = names(sensi)
+
+ii = c("skewness","confluence","confluence","coef","confluence")
+names(ii) = colnames(sobol[[1]])
+ii = ii[c("Chi", "phi_u", "delta", "xi_u", "gamma" )]
+senscol = rainbow(length(sobol)); names(senscol) = names(sobol)
+
+## Display which spatial feature is best explained by each parameter:
+par(mfrow=c(2,1), mai=c(0.85,2.75,0.25,1.55))
+boxplot(t(do.call(rbind,lapply(names(ii), function(x) sobol[[ii[x] ]][,x]))), ylim=c(0.01,1), border = senscol[ii], xlab = "Total Sobol Index", names = PARAM_ANNO[names(ii)], las=2, horizontal =T, log="x")
+lines(c(0,100), c(0,0), lty=2);
+legend("bottomleft", gsub("coef","gradient near edge", unique(ii)), fill=senscol[unique(ii)], cex=0.85, bty="n")
+```
+
+What the Sobol index is telling us here is which parameter best explains which aspect of the cells’ spatial distribution.  For example the chemotactic coefficient accounts for how sharply the cell density drops near the edge of a spot.
+
+## ECM specific model parameters
+
+Next, top simulations were projected onto UMAP space, revealing three clusters.
+
+```{r PCA of parameters from top simulations}
+pca <- FactoMineR::PCA(param[unlist(ii_sim),poi_dim], graph = T,scale.unit = T)
+print(factoextra::get_eigenvalue(pca)[,"variance.percent"], quote=F)
+pct_explained = sweep(pca$var$contrib, 2, FUN="*", factoextra::get_eigenvalue(pca)[,"variance.percent"]/100)
+pct_explained = apply(pct_explained[,1:3], 1, sum); 
+pct_explained = pct_explained[names(sort(pct_explained, decreasing = T))]
+par(mai=c(0.95,2.75,0.25,0.25))
+barplot(t(pca$var$contrib[names(pct_explained),1:3]), names=PARAM_ANNO[names(pct_explained)], las=2, beside = F, horiz = T, xlab="% variance explained");
+legend("topright", c("PC1", "PC2", "PC3"), fill = gray.colors(3) )
+## UMAP
+ump = as.data.frame(umap::umap(pca$ind$coord)$layout)
+colnames(ump) = c("UMAP 1", "UMAP 2")
+ump$ecm = unlist(sapply(names(ii_sim), function(x) rep(x,length(ii_sim[[x]]))))
+```
+
+Most ECMs were enriched in one single of the three clusters. All five model parameters show significant differences between the three clusters – for example ECMs in the darkest cluster tend to have higher nutrient diffusion coefficients:
+
+```{r Cluster PCs and visualize}
+par(mfrow=c(2,2), mai=c(0.75,0.75,0.25,0.25))
+clusters = dbscan::dbscan(ump[,1:2],eps=0.8, minPts = 18)$cluster ; 
+names(clusters) = ump$ecm
+clcol = gray.colors(length(unique(clusters))+1)
+fr = plyr::count(clusters)
+ii = which(clusters %in% fr$x[fr$freq>1])
+
+## Display clusters:
+plot(ump[ii,1],ump[ii,2], col=clcol[clusters[ii]], pch=20, main="cluster membership",cex=0.5)
+plot(ump[,1],ump[,2], pch=20, col=col[ump$ecm], cex=0.7, main="UMAP of top ECM-specific parameters")
+plot(1,col="white", axes=F, xlab="", ylab="")
+legend("topleft", unique(names(clusters)), fill=col[unique(names(clusters))], cex=0.7)
+
+## Cluster membership distribution per ECM
+la = lapply(unique(names(clusters)), function(x) plyr::count(c(unique(clusters[ii]),clusters[ii][names(clusters[ii])==x])))
+la = sapply(la, function(x) x$freq/sum(x$freq))
+colnames(la) = unique(names(clusters))
+la = la[,sort(apply(la,2, function(x) mean(rank(x)[1:2])), index.return=T)$ix]
+la = la[,sort(apply(la,2, function(x) mean(rank(x)[2:3])), index.return=T)$ix];
+barplot(la, las=2, col = clcol, ylab="Fraction of top simulations")
+plot(1, col="white")
+legend("topleft", paste("cluster",1:nrow(la)), fill=clcol)
+
+## Inter-cluster comparison of model parameters:
+tmp=pca$call$X; 
+tmp = lapply(colnames(tmp), function(x) cbind(as.data.frame(0.01+tmp[,x,drop=F]),as.factor(clusters), rep(PARAM_ANNO[[x]],nrow(tmp))))
+tmp = as.data.frame(rbindlist(tmp, use.names=F))
+colnames(tmp) = c("Value","Cluster","Parameter")
+ggplot(tmp, aes(x=Parameter, y=Value, fill=Cluster)) + geom_boxplot() +  scale_y_log10() +
+  scale_fill_manual(values=clcol) + theme(axis.text.x = element_text(angle = 9)) +
+  ggpubr::stat_compare_means(aes(group = Cluster), label = "p.signif", method="anova")
+```
+
+We conclude that there is little redundancy in the contributions of model paramters and that all play a role in explaining different aspects of the cells’ growth patterns.
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
