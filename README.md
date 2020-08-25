@@ -58,6 +58,15 @@ saveFiles	false
 randomCellMotion	1e-2
 ```
 
+## Running the R Markdown script "ModelCalibration_MEP-LINCS.Rmd" requires:
+
+  1) downloading the contents of Git folder RMarkdown
+  2) downloading SupplementaryData1,2 and 3 from the corresponding article published in Cancer Research (Kimmel et al., 2020)
+  3) installing package "rmarkdown" in R: install.packages("rmarkdown")
+
+
+```Calling `rmarkdown::render("ModelCalibration_MEP-LINCS.Rmd")` should then reproduce RMarkdown/ModelCalibration_MEP-LINCS.html locally.```
+
 ## Authors
 
 * **Gregory Kimmel**
