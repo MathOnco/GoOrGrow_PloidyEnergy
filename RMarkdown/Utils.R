@@ -234,7 +234,7 @@ nondimensional2dimensional <- function(eta, a, R, R_um = 0.5*10*UM_SPOT_DIAM, ta
   L = R_um / R
   
   ## Cell growth rate
-  lambda = 2 /(2^(hcc1954_DT/24))
+  lambda = 24*log(2)/hcc1954_DT
   
   days = tau/lambda
   
