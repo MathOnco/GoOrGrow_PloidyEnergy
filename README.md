@@ -75,4 +75,12 @@ randomCellMotion	1e-2
 
 ## License
 
+GPL-2
+
 ## Acknowledgements
+
+We thank the researchers of the Department of Integrated Mathematical Oncology at Moffitt Cancer Center for fruitful discussions and early feedback on parts of the model. 
+
+## References
+
+Kimmel, G. J., Dane, M., Heiser, L. M., Altrock, P. M. & Andor, N. Integrating mathematical modeling with high throughput imaging explains how polyploid populations behave in nutrient-sparse environments. Cancer Res. (2020) doi:10.1158/0008-5472.CAN-20-1231.
